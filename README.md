@@ -49,6 +49,20 @@ After install, the script prints a PowerShell command for your first Windows age
 
 Already-enrolled agents use their own per-machine token. Rotating the enrollment key affects only new enrollments.
 
+## Screenshots
+
+The screenshots below show the dashboard layout with identifying endpoint/customer data blurred.
+
+![Health dashboard](docs/screenshots/health-dashboard.png)
+
+![Fleet overview](docs/screenshots/fleet-overview.png)
+
+![Script library](docs/screenshots/script-library.png)
+
+![Automation groups](docs/screenshots/automation-groups.png)
+
+![Job history](docs/screenshots/job-history.png)
+
 ## Security notes
 
 This system can execute scripts as SYSTEM on managed endpoints. Treat the server like critical infrastructure.
