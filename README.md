@@ -1,6 +1,6 @@
 # OpenPrimeRMM
 
-OpenPrimeRMM is a self-hosted RMM platform for Windows endpoint monitoring, patch visibility, script execution, automation, inventory, and technician operations.
+OpenPrimeRMM is a community-source, self-hosted RMM platform for MSPs and internal IT teams to monitor Windows endpoints, manage patches, run scripts, automate operations, and track fleet health.
 
 This repository is the community-source, tenant-neutral distribution. It does not include private tenant seed scripts, credentials, production data, or deployment history.
 
