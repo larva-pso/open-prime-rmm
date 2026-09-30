@@ -1,0 +1,9 @@
+# Caddy reverse proxy for Outpost RMM
+# Automatic HTTPS via Let's Encrypt — just point your DNS (rmm.yourmsp.com)
+# at your HQ public IP and forward TCP 80 + 443 to this box.
+
+rmm.yourmsp.com {
+    reverse_proxy 127.0.0.1:8420
+    # Pass the real client IP through to the app
+    header_up X-Forwarded-For {remote_host}
+}

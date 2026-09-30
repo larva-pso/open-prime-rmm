@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  OpenPrime RMM Agent - MSI (WiX Toolset v3)
+
+  Build on any Windows machine with WiX v3 installed (see build.cmd), then deploy:
+
+    msiexec /i OpenPrimeAgent.msi SERVERURL=https://rmm.yourmsp.com ENROLLKEY=YOUR-KEY ORGNAME="Acme Dental" /qn
+
+  Uninstall:  msiexec /x OpenPrimeAgent.msi /qn
+              (removes the scheduled task and all agent data)
+
+  NOTE: keep the UpgradeCode GUID stable forever - it is what lets newer
+  MSI versions upgrade older installs in place.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+
+  <Product Id="*"
+           Name="OpenPrime RMM Agent"
+           Language="1033"
+           Version="1.0.0"
+           Manufacturer="Your MSP"
+           UpgradeCode="D6F2AF32-7F7E-4158-B722-7E7BD02C4161">
+
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine"
+             Description="OpenPrime RMM Agent" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of the OpenPrime agent is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Passed on the msiexec command line (or baked in via a transform for GPO) -->
+    <Property Id="SERVERURL" Secure="yes" />
+    <Property Id="ENROLLKEY" Secure="yes" Hidden="yes" />
+    <Property Id="ORGNAME" Secure="yes" />
+
+    <!-- Require both properties on a fresh install -->
+    <Condition Message="SERVERURL and ENROLLKEY properties are required. Example: msiexec /i OpenPrimeAgent.msi SERVERURL=https://rmm.yourmsp.com ENROLLKEY=xxxx /qn">
+      Installed OR (SERVERURL AND ENROLLKEY)
+    </Condition>
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLDIR" Name="OpenPrime">
+          <Component Id="AgentScript" Guid="FA3B50BD-1188-4317-8BFE-BEAD50B265AA" Win64="yes">
+            <File Id="AgentPs1" Source="agent.ps1" KeyPath="yes" />
+          </Component>
+          <Component Id="SetupScript" Guid="D637FABB-2357-4352-A6A2-5504F4C01622" Win64="yes">
+            <File Id="SetupPs1" Source="Setup.ps1" KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id="Main" Title="OpenPrime Agent" Level="1">
+      <ComponentRef Id="AgentScript" />
+      <ComponentRef Id="SetupScript" />
+    </Feature>
+
+    <!--
+      Custom actions run Setup.ps1 elevated (deferred / no-impersonate) via WixQuietExec64,
+      so install output lands in the MSI log instead of flashing console windows.
+    -->
+    <SetProperty Id="EnrollAgent"
+                 Value="&quot;powershell.exe&quot; -NoProfile -ExecutionPolicy Bypass -File &quot;[INSTALLDIR]Setup.ps1&quot; -ServerUrl &quot;[SERVERURL]&quot; -EnrollKey &quot;[ENROLLKEY]&quot; -OrgName &quot;[ORGNAME]&quot;"
+                 Before="EnrollAgent" Sequence="execute" />
+    <CustomAction Id="EnrollAgent" BinaryKey="WixCA" DllEntry="WixQuietExec64"
+                  Execute="deferred" Impersonate="no" Return="check" />
+
+    <SetProperty Id="RemoveAgent"
+                 Value="&quot;powershell.exe&quot; -NoProfile -ExecutionPolicy Bypass -File &quot;[INSTALLDIR]Setup.ps1&quot; -Uninstall"
+                 Before="RemoveAgent" Sequence="execute" />
+    <CustomAction Id="RemoveAgent" BinaryKey="WixCA" DllEntry="WixQuietExec64"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+
+    <InstallExecuteSequence>
+      <!-- Enroll + register the scheduled task on fresh install and on upgrades -->
+      <Custom Action="EnrollAgent" After="InstallFiles">NOT (REMOVE="ALL")</Custom>
+      <!-- Tear down the task/data on real uninstalls only (not during an upgrade) -->
+      <Custom Action="RemoveAgent" After="InstallInitialize">(REMOVE="ALL") AND (NOT UPGRADINGPRODUCTCODE)</Custom>
+    </InstallExecuteSequence>
+
+  </Product>
+</Wix>

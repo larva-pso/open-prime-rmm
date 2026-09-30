@@ -1,0 +1,19 @@
+# systemd unit — copy to /etc/systemd/system/outpost.service
+# then: systemctl daemon-reload && systemctl enable --now outpost
+[Unit]
+Description=OpenPrime RMM server
+After=network.target
+
+[Service]
+Type=simple
+User=outpost
+WorkingDirectory=/opt/open-prime-rmm/server
+Environment=OUTPOST_ADMIN_PASSWORD=CHANGE-ME
+Environment=OUTPOST_ENROLL_KEY=CHANGE-ME-TOO
+Environment=OUTPOST_COMPANY_NAME=OpenPrimeworks
+ExecStart=/opt/open-prime-rmm/venv/bin/uvicorn app:app --host 127.0.0.1 --port 8420
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

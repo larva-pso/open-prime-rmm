@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Shell syntax
+        run: bash -n install.sh backup-now.sh restore-backup.sh
+
+      - name: Python compile
+        run: python -m compileall -q server agent
+
+      - name: Secret and tenant marker scan
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          terms = [
+              ''.join(['Prime', 'Networks']),
+              ''.join(['prime', 'network', '.us']),
+              ''.join(['rmm.', 'prime', 'network']),
+              ''.join(['U3', 'ArBts']),
+          ]
+          bad = []
+          for path in Path('.').rglob('*'):
+              if not path.is_file():
+                  continue
+              rel = path.as_posix()
+              if rel.startswith('./.git/') or '.git/' in rel or rel.startswith('.venv/'):
+                  continue
+              if rel in {'LICENSE.md', 'TRADEMARKS.md'} or rel.startswith('.github/'):
+                  continue
+              try:
+                  text = path.read_text(errors='ignore')
+              except Exception:
+                  continue
+              for term in terms:
+                  if term in text:
+                      bad.append((rel, term))
+          if bad:
+              for rel, term in bad:
+                  print(f'{rel}: contains {term!r}')
+              raise SystemExit(1)
+          print('marker scan passed')
+          PY
+
+      - name: Tests
+        env:
+          OUTPOST_ADMIN_PASSWORD: test
+          OUTPOST_ENROLL_KEY: test
+        run: python -m pytest -q

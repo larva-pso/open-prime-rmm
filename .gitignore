@@ -1,0 +1,15 @@
+# runtime data and secrets
+server/data/
+*.db
+*.sqlite
+*.env
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# build artifacts
+*.zip
+*.msi
+agent/msi-dist/
