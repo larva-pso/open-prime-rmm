@@ -17,6 +17,7 @@ fail(){ printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 ask(){ local prompt="$1" default="${2:-}" value=""; if [ -n "$default" ]; then read -r -p "$prompt [$default]: " value; printf '%s' "${value:-$default}"; else read -r -p "$prompt: " value; printf '%s' "$value"; fi; }
 yesno(){ local prompt="$1" default="${2:-Y}" value=""; read -r -p "$prompt [$default/n]: " value; value="${value:-$default}"; [[ "$value" =~ ^[Yy] ]]; }
 rand(){ openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | head -c "$1"; }
+env_quote(){ local v="$1"; v="${v//\\/\\\\}"; v="${v//\"/\\\"}"; v="${v//\$/\\\$}"; v="${v//\`/\\\`}"; printf '"%s"' "$v"; }
 
 [ "$(id -u)" -eq 0 ] || fail "Run as root: sudo bash install.sh"
 [ -f "$SRC_DIR/server/app.py" ] || fail "Run from the OpenPrimeRMM project folder; server/app.py not found."
@@ -76,12 +77,12 @@ if [ ! -f "$ENV_FILE" ] || [ "$ROTATE" = "yes" ]; then
   SESSION_SECRET="$(rand 48)"
   READONLY_TOKEN="$(rand 48)"
   cat > "$ENV_FILE" <<EOF_ENV
-OUTPOST_ADMIN_PASSWORD=$ADMIN_PW
-OUTPOST_ENROLL_KEY=$ENROLL
-OUTPOST_COMPANY_NAME=$COMPANY
-OUTPOST_SESSION_SECRET=$SESSION_SECRET
-OUTPOST_READONLY_API_TOKEN=$READONLY_TOKEN
-OUTPOST_DATA_DIR=$APP_DIR/server/data
+OUTPOST_ADMIN_PASSWORD=$(env_quote "$ADMIN_PW")
+OUTPOST_ENROLL_KEY=$(env_quote "$ENROLL")
+OUTPOST_COMPANY_NAME=$(env_quote "$COMPANY")
+OUTPOST_SESSION_SECRET=$(env_quote "$SESSION_SECRET")
+OUTPOST_READONLY_API_TOKEN=$(env_quote "$READONLY_TOKEN")
+OUTPOST_DATA_DIR=$(env_quote "$APP_DIR/server/data")
 EOF_ENV
   chmod 600 "$ENV_FILE"
 else

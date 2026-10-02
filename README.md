@@ -67,6 +67,8 @@ The screenshots below show the dashboard layout with identifying endpoint/custom
 
 This system can execute scripts as SYSTEM on managed endpoints. Treat the server like critical infrastructure.
 
+Built-in protections include per-endpoint agent tokens, server-side token hashing, authenticated agent check-ins, tenant-safe enrollment collision checks, locked-down endpoint config ACLs, no inbound listener on endpoints, dashboard password hashing, optional TOTP 2FA, login throttling, role checks, generated per-instance server secrets, and a hardened systemd service.
+
 Recommended before real use:
 
 - run behind HTTPS only
@@ -76,7 +78,7 @@ Recommended before real use:
 - pilot agent changes on a lab workstation before broad rollout
 - rotate the enrollment key after mass enrollment
 
-See SECURITY.md for reporting and deployment guidance.
+See SECURITY.md for the full security model, current controls, known limitations, reporting process, and hardening roadmap.
 
 ## Development
 
