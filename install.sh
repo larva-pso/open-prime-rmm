@@ -18,6 +18,8 @@ ask(){ local prompt="$1" default="${2:-}" value=""; if [ -n "$default" ]; then r
 yesno(){ local prompt="$1" default="${2:-Y}" value=""; read -r -p "$prompt [$default/n]: " value; value="${value:-$default}"; [[ "$value" =~ ^[Yy] ]]; }
 rand(){ openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | head -c "$1"; }
 env_quote(){ local v="$1"; v="${v//\\/\\\\}"; v="${v//\"/\\\"}"; v="${v//\$/\\\$}"; v="${v//\`/\\\`}"; printf '"%s"' "$v"; }
+first_lan_ip(){ hostname -I 2>/dev/null | awk '{print $1}' || true; }
+set_env(){ local key="$1" value="$2" tmp=""; tmp="$(mktemp)"; if [ -f "$ENV_FILE" ]; then grep -v "^${key}=" "$ENV_FILE" > "$tmp" || true; fi; printf '%s=%s\n' "$key" "$(env_quote "$value")" >> "$tmp"; cat "$tmp" > "$ENV_FILE"; rm -f "$tmp"; chmod 600 "$ENV_FILE"; }
 
 [ "$(id -u)" -eq 0 ] || fail "Run as root: sudo bash install.sh"
 [ -f "$SRC_DIR/server/app.py" ] || fail "Run from the OpenPrimeRMM project folder; server/app.py not found."
@@ -28,7 +30,32 @@ if [ -z "$DOMAIN" ]; then DOMAIN="$(ask 'Public DNS name for this RMM server, or
 PORT="$(ask 'Internal application port' "$DEFAULT_PORT")"
 COMPANY="$(ask 'Company/display name shown in reports' 'OpenPrimeRMM')"
 USE_CADDY="no"
-if [ -n "$DOMAIN" ]; then if yesno "Install/configure Caddy for automatic HTTPS on $DOMAIN?" "Y"; then USE_CADDY="yes"; fi; fi
+TLS_MODE="none"
+PUBLIC_HOST="$DOMAIN"
+APP_BIND="127.0.0.1"
+LAN_HOST="$(first_lan_ip)"
+if [ -n "$DOMAIN" ]; then
+  if yesno "Install/configure Caddy with Let's Encrypt HTTPS on $DOMAIN?" "Y"; then
+    USE_CADDY="yes"
+    TLS_MODE="public"
+    PUBLIC_HOST="$DOMAIN"
+  else
+    APP_BIND="0.0.0.0"
+    PUBLIC_HOST="$DOMAIN"
+  fi
+else
+  if yesno "No public DNS name entered. Configure Caddy local HTTPS for LAN access?" "Y"; then
+    USE_CADDY="yes"
+    TLS_MODE="internal"
+    PUBLIC_HOST="$(ask 'LAN IP or hostname clients will browse to' "${LAN_HOST:-127.0.0.1}")"
+  elif yesno "Expose plain HTTP on the LAN instead?" "N"; then
+    APP_BIND="0.0.0.0"
+    PUBLIC_HOST="$(ask 'LAN IP or hostname clients will browse to' "${LAN_HOST:-127.0.0.1}")"
+  else
+    PUBLIC_HOST="127.0.0.1"
+  fi
+fi
+if [ "$USE_CADDY" = "yes" ]; then BASE_URL="https://$PUBLIC_HOST"; elif [ "$APP_BIND" = "0.0.0.0" ]; then BASE_URL="http://$PUBLIC_HOST:$PORT"; else BASE_URL="http://127.0.0.1:$PORT"; fi
 ROTATE="no"
 if [ -f "$ENV_FILE" ]; then if yesno "$ENV_FILE exists. Keep existing secrets/enroll key?" "Y"; then ROTATE="no"; else ROTATE="yes"; fi; fi
 
@@ -88,6 +115,8 @@ EOF_ENV
 else
   say "Keeping existing secrets in $ENV_FILE."
 fi
+set_env OUTPOST_PUBLIC_URL "$BASE_URL"
+if [ "$USE_CADDY" = "yes" ]; then set_env OUTPOST_COOKIE_SECURE "true"; else set_env OUTPOST_COOKIE_SECURE "false"; fi
 . "$ENV_FILE"
 
 say "Installing systemd auto-start service..."
@@ -103,7 +132,7 @@ User=$SERVICE_USER
 Group=$SERVICE_USER
 WorkingDirectory=$APP_DIR/server
 EnvironmentFile=$ENV_FILE
-ExecStart=$APP_DIR/venv/bin/uvicorn app:app --host 127.0.0.1 --port $PORT
+ExecStart=$APP_DIR/venv/bin/uvicorn app:app --host $APP_BIND --port $PORT
 Restart=always
 RestartSec=5
 NoNewPrivileges=true
@@ -119,21 +148,28 @@ sleep 2
 systemctl is-active --quiet "$SERVICE_NAME" || fail "$SERVICE_NAME failed to start; run: journalctl -u $SERVICE_NAME -n 80 --no-pager"
 
 if [ "$USE_CADDY" = "yes" ]; then
-  command -v caddy >/dev/null 2>&1 || warn "Caddy was requested but is not installed; skipping reverse proxy."
+  command -v caddy >/dev/null 2>&1 || fail "Caddy was requested but is not installed. Install Caddy or re-run and choose LAN HTTP/local-only mode."
   if command -v caddy >/dev/null 2>&1; then
-    say "Configuring Caddy for https://$DOMAIN ..."
-    cat > /etc/caddy/Caddyfile <<EOF_CADDY
-$DOMAIN {
+    say "Configuring Caddy for $BASE_URL ..."
+    if [ "$TLS_MODE" = "internal" ]; then
+      cat > /etc/caddy/Caddyfile <<EOF_CADDY
+$PUBLIC_HOST {
+    tls internal
     reverse_proxy 127.0.0.1:$PORT
 }
 EOF_CADDY
+    else
+      cat > /etc/caddy/Caddyfile <<EOF_CADDY
+$PUBLIC_HOST {
+    reverse_proxy 127.0.0.1:$PORT
+}
+EOF_CADDY
+    fi
     systemctl enable --now caddy || true
     systemctl reload caddy || systemctl restart caddy
   fi
 fi
 
-BASE_URL="http://127.0.0.1:$PORT"
-[ -n "$DOMAIN" ] && BASE_URL="https://$DOMAIN"
 PUBLIC_IP="$(curl -4fsS --max-time 5 https://ifconfig.me 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || true)"
 cat <<EOF_DONE
 
@@ -146,9 +182,15 @@ cat <<EOF_DONE
   Enroll key     : $OUTPOST_ENROLL_KEY
   Read-only API  : configured in $ENV_FILE
   Secrets file   : $ENV_FILE (root-only; back it up securely)
+  TLS mode       : $TLS_MODE
 
-  If using public HTTPS, point DNS A record $DOMAIN to: ${PUBLIC_IP:-your public IP}
+  Public DNS HTTPS: point DNS A record ${DOMAIN:-your.domain.example} to: ${PUBLIC_IP:-your public IP}
   and forward TCP 80/443 to this server.
+
+  LAN/local HTTPS with Caddy uses an internal certificate authority. Browsers
+  may show a certificate warning unless you trust Caddy's local root CA on the
+  client device. Plain public production access should use DNS + Let's Encrypt.
+  Caddy local CA : /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt
 
   First Windows agent install, run PowerShell as Administrator:
     irm $BASE_URL/downloads/Install-Agent.ps1 -OutFile \$env:TEMP\\Install-Agent.ps1

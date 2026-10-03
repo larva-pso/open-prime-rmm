@@ -58,7 +58,7 @@ OpenPrimeRMM is a community-source RMM project, not a magic security boundary. I
 - The installer generates unique per-instance secrets on first install instead of shipping shared default credentials.
 - Instance secrets are written to `/etc/open-prime-rmm.env` with mode `600`.
 - The systemd unit runs the app as the dedicated service user and includes basic hardening such as `NoNewPrivileges=true`, `ProtectSystem=full`, and a limited `ReadWritePaths` for application data.
-- Optional Caddy configuration terminates public HTTPS and reverse-proxies to the local application listener.
+- Optional Caddy configuration terminates HTTPS and reverse-proxies to the local application listener. Public DNS installs use Caddy's automatic public certificates; LAN-only installs can use Caddy's internal certificate authority for local HTTPS.
 - The installer preserves or rotates existing secrets explicitly on reinstall instead of silently replacing them.
 
 ## Recommended deployment controls

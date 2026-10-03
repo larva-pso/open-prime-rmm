@@ -32,16 +32,23 @@ The installer asks for:
 - internal application port
 - display/company name
 - whether to install/configure Caddy for HTTPS
+  - with a public DNS name, Caddy requests a public Let's Encrypt certificate
+  - without a public DNS name, Caddy can create local LAN HTTPS using its internal certificate authority
+  - if you decline Caddy, the installer can expose plain LAN HTTP for lab-only testing
 - whether to keep or rotate existing secrets on reinstall
 
-It installs Python dependencies, creates `/opt/open-prime-rmm`, creates a dedicated service user, writes a systemd auto-start service, optionally configures Caddy, and generates unique per-instance secrets in `/etc/open-prime-rmm.env`:
+It installs Python dependencies, creates `/opt/open-prime-rmm`, creates a dedicated service user, writes a systemd auto-start service, optionally configures Caddy HTTPS, and generates unique per-instance secrets in `/etc/open-prime-rmm.env`:
 
 - dashboard admin password
 - enrollment key
 - session secret
 - read-only API token
+- public dashboard URL
+- cookie security mode
 
 Do not commit or share `/etc/open-prime-rmm.env`.
+
+For public production access, use a DNS name and Caddy/Let's Encrypt. LAN-local HTTPS uses Caddy's internal CA, so browsers may warn until you trust the generated Caddy root certificate on the client device.
 
 ## Agent install
 
