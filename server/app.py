@@ -1397,6 +1397,24 @@ def client_ip(request: Request) -> str:
     return (request.client.host if request.client else "")[:64]
 
 
+def secure_cookie(request: Request) -> bool:
+    """Return whether dashboard cookies should be marked Secure.
+
+    LAN-only test installs commonly access the dashboard over plain HTTP by VM
+    IP. A Secure cookie is correct for public HTTPS deployments, but browsers do
+    not store Secure cookies from http:// URLs, which makes login appear to
+    succeed and then immediately return to the sign-in screen. Honor common
+    proxy headers so HTTPS behind Caddy/nginx still gets Secure cookies.
+    """
+    override = os.environ.get("OUTPOST_COOKIE_SECURE", "auto").strip().lower()
+    if override in {"1", "true", "yes", "on"}:
+        return True
+    if override in {"0", "false", "no", "off"}:
+        return False
+    proto = (request.headers.get("X-Forwarded-Proto") or request.url.scheme or "").split(",")[0].strip().lower()
+    return proto == "https"
+
+
 # Very small in-memory brake on login brute force
 _login_fail: dict[str, list[float]] = {}
 
@@ -2723,7 +2741,7 @@ async def login(request: Request, response: Response):
         response.set_cookie(
             "outpost_login_challenge",
             make_login_challenge(user["id"], user["username"], user["role"], ip),
-            httponly=True, samesite="strict", secure=True,
+            httponly=True, samesite="strict", secure=secure_cookie(request),
             max_age=LOGIN_CHALLENGE_SECONDS, path="/",
         )
         return {"ok": True, "requires_totp": True, "username": user["username"]}
@@ -2790,7 +2808,7 @@ def _complete_dashboard_login(request: Request, response: Response, user, ip: st
     response.set_cookie(
         "outpost_session",
         make_session_cookie(user["id"], user["username"], user["role"]),
-        httponly=True, samesite="strict", secure=True, max_age=SESSION_HOURS * 3600,
+        httponly=True, samesite="strict", secure=secure_cookie(request), max_age=SESSION_HOURS * 3600,
         path="/",
     )
     response.delete_cookie("outpost_login_challenge", path="/")
